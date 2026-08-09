@@ -1,11 +1,37 @@
-<div align="center">
+# Neighbour Renting
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+A peer-to-peer neighbourhood rental platform built with Laravel and Vue 3.
 
-  <h1>Built with AI Studio</h2>
+## Tech Stack
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+- **Backend**: Laravel API, MySQL, Sanctum auth (SPA cookie + token fallback)
+- **Frontend**: Vue 3 SPA (inertia), Tailwind CSS, Vue Router, Pinia stores
+- **Queues & Cache**: Database driver
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+## Setup
 
-</div>
+```bash
+# Backend
+cp .env.example .env
+composer install
+php artisan key:generate
+php artisan migrate --seed
+
+# Frontend
+cd frontend
+npm install
+npm run build
+```
+
+## Development
+
+```bash
+# Terminal 1 — Backend
+php artisan serve
+
+# Terminal 2 — Frontend
+cd frontend
+npm run dev
+```
+
+The frontend dev server proxies API calls to `http://localhost:8000/api`.

@@ -1,0 +1,8 @@
+{
+  "name": "Neighbour Renting",
+  "description": "Peer-to-peer neighborhood rental marketplace for tools, equipment, vehicles, and spaces.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
