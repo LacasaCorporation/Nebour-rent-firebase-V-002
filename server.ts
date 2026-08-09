@@ -7,12 +7,25 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
+import { GoogleGenAI } from '@google/genai';
 import { initDatabase, queryAll, queryOne, runSql } from './db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const JWT_SECRET = process.env.JWT_SECRET || 'neighbour-renting-secret-key-2026';
+
+let aiClient: GoogleGenAI | null = null;
+function getGeminiClient(): GoogleGenAI {
+  if (!aiClient) {
+    const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+    if (!apiKey) {
+      throw new Error('GEMINI_API_KEY environment variable is required');
+    }
+    aiClient = new GoogleGenAI({ apiKey });
+  }
+  return aiClient;
+}
 
 // Setup file upload
 const uploadsDir = path.join(__dirname, 'public/uploads');
@@ -26,8 +39,21 @@ const notificationPreferencesMap: Record<number, any> = {};
 const notificationsList: any[] = [];
 const savedSearchesList: any[] = [];
 
+function getHaversineDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371; // Earth radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const d = R * c;
+  return Math.round(d * 10) / 10;
+}
+
 // Helper function to format database listing row into nested object format
-function formatListing(row: any) {
+function formatListing(row: any, userLat?: number, userLng?: number) {
   if (!row) return null;
   let parsedImages: string[] = [];
   try {
@@ -40,6 +66,31 @@ function formatListing(row: any) {
   }
 
   const effectiveAgreementText = row.agreement_text || row.company_agreement_text || '';
+
+  let parsedBlockedDates: string[] = [];
+  try {
+    parsedBlockedDates = typeof row.blocked_dates === 'string' ? JSON.parse(row.blocked_dates) : row.blocked_dates || [];
+  } catch {
+    parsedBlockedDates = [];
+  }
+
+  // Ensure valid lat/lng coordinates
+  let itemLat = row.lat !== null && row.lat !== undefined ? Number(row.lat) : null;
+  let itemLng = row.lng !== null && row.lng !== undefined ? Number(row.lng) : null;
+
+  if (itemLat === null || itemLng === null) {
+    // Deterministic offset based on ID for items without lat/lng
+    const seed = (row.id || 1) * 17;
+    itemLat = 37.7749 + ((seed % 100) - 50) * 0.005; // SF base
+    itemLng = -122.4194 + (((seed * 13) % 100) - 50) * 0.005;
+  }
+
+  let distanceKm: number | null = null;
+  let distanceMiles: number | null = null;
+  if (userLat !== undefined && userLng !== undefined && !isNaN(userLat) && !isNaN(userLng)) {
+    distanceKm = getHaversineDistance(userLat, userLng, itemLat, itemLng);
+    distanceMiles = Math.round((distanceKm * 0.621371) * 10) / 10;
+  }
 
   return {
     id: row.id,
@@ -56,11 +107,14 @@ function formatListing(row: any) {
     security_deposit: row.security_deposit ? Number(row.security_deposit) : null,
     location: row.location,
     address: row.address || '',
-    lat: row.lat !== null && row.lat !== undefined ? Number(row.lat) : null,
-    lng: row.lng !== null && row.lng !== undefined ? Number(row.lng) : null,
+    lat: itemLat,
+    lng: itemLng,
+    distance_km: distanceKm,
+    distance_miles: distanceMiles,
     status: row.status,
     available_from: row.available_from,
     available_to: row.available_to,
+    blocked_dates: parsedBlockedDates,
     agreement_text: effectiveAgreementText,
     agreement_document: row.agreement_document || '',
     rating: Number(row.rating || 5.0),
@@ -73,7 +127,9 @@ function formatListing(row: any) {
       name: row.user_name,
       email: row.user_email,
       phone: row.user_phone,
-      avatar: row.user_avatar
+      avatar: row.user_avatar,
+      is_id_verified: row.user_is_id_verified !== undefined ? Boolean(row.user_is_id_verified) : true,
+      id_badge_type: row.user_id_badge_type || 'trusted_lender'
     } : undefined,
     category: row.category_name ? {
       id: row.category_id,
@@ -208,7 +264,7 @@ function safeJsonParse(str: any, defaultVal: any) {
 
 const SELECT_LISTING_FIELDS = `
   l.*, 
-  u.name as user_name, u.email as user_email, u.phone as user_phone, u.avatar as user_avatar,
+  u.name as user_name, u.email as user_email, u.phone as user_phone, u.avatar as user_avatar, u.is_id_verified as user_is_id_verified, u.id_badge_type as user_id_badge_type,
   c.name as category_name, c.slug as category_slug, c.icon as category_icon,
   comp.name as company_name, comp.slug as company_slug, comp.logo as company_logo, comp.cover_image as company_cover_image, comp.is_verified as company_is_verified, comp.agreement_text as company_agreement_text, comp.license_number as company_license_number, comp.insurance_info as company_insurance_info, comp.phone as company_phone, comp.email as company_email, comp.website as company_website, comp.address as company_address
 `;
@@ -469,7 +525,10 @@ async function startServer() {
 
   // LISTINGS
   app.get('/api/listings', optionalAuth, async (req: Request, res: Response) => {
-    const { search, category_id, company_id, location, min_price, max_price, sort, direction } = req.query;
+    const { search, category_id, company_id, location, min_price, max_price, sort, direction, user_lat, user_lng, lat, lng, max_distance_km } = req.query;
+
+    const uLat = user_lat !== undefined ? Number(user_lat) : (lat !== undefined ? Number(lat) : undefined);
+    const uLng = user_lng !== undefined ? Number(user_lng) : (lng !== undefined ? Number(lng) : undefined);
 
     let sql = `
       SELECT ${SELECT_LISTING_FIELDS}
@@ -525,7 +584,22 @@ async function startServer() {
     }
 
     const rows = await queryAll(sql, params);
-    const formatted = rows.map(formatListing);
+    let formatted = rows.map((r: any) => formatListing(r, uLat, uLng));
+
+    // Filter by distance if specified
+    if (max_distance_km && !isNaN(Number(max_distance_km))) {
+      const maxD = Number(max_distance_km);
+      formatted = formatted.filter((item: any) => item && item.distance_km !== null && item.distance_km <= maxD);
+    }
+
+    // Sort by distance if sort=distance or if location coordinates provided without explicit sort
+    if (sort === 'distance' || (uLat !== undefined && uLng !== undefined && !sort)) {
+      formatted.sort((a: any, b: any) => {
+        const dA = a.distance_km ?? 999999;
+        const dB = b.distance_km ?? 999999;
+        return dA - dB;
+      });
+    }
 
     const page = Number(req.query.page) || 1;
     const perPage = Number(req.query.per_page) || Number(req.query.limit) || 12;
@@ -1364,8 +1438,160 @@ async function startServer() {
     res.json({ data: formatted });
   });
 
+  // AI SMART VALUE & LISTING ASSISTANT
+  app.post('/api/ai/smart-value', async (req: Request, res: Response) => {
+    try {
+      const { title, category, description, prompt, imageBase64 } = req.body;
+      const ai = getGeminiClient();
+
+      const contents: any[] = [];
+      if (imageBase64) {
+        const cleanData = String(imageBase64).replace(/^data:image\/\w+;base64,/, '');
+        contents.push({
+          inlineData: {
+            mimeType: 'image/jpeg',
+            data: cleanData
+          }
+        });
+      }
+
+      const sysPrompt = `You are an expert peer-to-peer rental marketplace valuer and listing optimizer for equipment, vehicles, tools, electronics, and goods.
+Analyze the provided item details or image.
+Return ONLY a valid JSON object (no markdown formatting, no \`\`\` code fences) with the exact structure:
+{
+  "title": "Optimized, catchy listing title (under 60 chars)",
+  "description": "Structured, highly attractive description highlighting key features, included accessories, and recommended use-cases.",
+  "suggestedDailyPrice": 25.00,
+  "estimatedReplacementValue": 250.00,
+  "suggestedSecurityDeposit": 50.00,
+  "tags": ["Tag1", "Tag2", "Tag3"],
+  "tips": ["Tip 1 for lender success", "Safety advice for handover"]
+}
+
+Context provided:
+Item Title Hint: ${title || 'N/A'}
+Category Hint: ${category || 'N/A'}
+User Description Notes: ${description || 'N/A'}
+User Prompt: ${prompt || 'Suggest optimal pricing, title, description, and security deposit for renting out this item.'}`;
+
+      contents.push({ text: sysPrompt });
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents
+      });
+
+      const rawText = response.text || '';
+      const cleanJsonText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+      let data;
+      try {
+        data = JSON.parse(cleanJsonText);
+      } catch {
+        data = {
+          title: title || 'Premium Equipment Item for Rent',
+          description: description || 'High quality equipment in great working condition, available for daily or weekly neighborhood rental.',
+          suggestedDailyPrice: 28.00,
+          estimatedReplacementValue: 300.00,
+          suggestedSecurityDeposit: 60.00,
+          tags: ['equipment', 'tools', 'neighborhood-rental'],
+          tips: ['Inspect item condition together at pickup and take handover photos.']
+        };
+      }
+
+      res.json(data);
+    } catch (err: any) {
+      console.error('AI Valuer Error:', err);
+      res.status(500).json({ error: err.message || 'AI smart valuer failed' });
+    }
+  });
+
+  // IDENTITY VERIFICATION
+  app.post('/api/user/verify-identity', authenticateToken, async (req: any, res: Response) => {
+    try {
+      const { document_type, badge_type } = req.body;
+      const userId = req.user.id;
+      const assignedBadge = badge_type || 'trusted_lender';
+      const docType = document_type || 'drivers_license';
+
+      await runSql(`
+        UPDATE users 
+        SET is_id_verified = 1, 
+            id_badge_type = ?, 
+            id_verified_at = CURRENT_TIMESTAMP, 
+            id_document_type = ? 
+        WHERE id = ?
+      `, [assignedBadge, docType, userId]);
+
+      const updatedUser = await queryOne('SELECT id, name, email, phone, address, is_admin, avatar, is_id_verified, id_badge_type, id_verified_at FROM users WHERE id = ?', [userId]);
+      res.json({ message: 'Identity verified successfully!', user: updatedUser });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Failed to verify identity' });
+    }
+  });
+
+  // BLOCKED DATES
+  app.post('/api/listings/:id/blocked-dates', authenticateToken, async (req: any, res: Response) => {
+    try {
+      const listingId = Number(req.params.id);
+      const { blocked_dates } = req.body; // array of 'YYYY-MM-DD'
+      const listing = await queryOne('SELECT * FROM listings WHERE id = ?', [listingId]);
+      if (!listing) return res.status(404).json({ error: 'Listing not found' });
+
+      if (listing.user_id !== req.user.id && !req.user.is_admin) {
+        return res.status(403).json({ error: 'Unauthorized' });
+      }
+
+      const jsonDates = JSON.stringify(blocked_dates || []);
+      await runSql('UPDATE listings SET blocked_dates = ? WHERE id = ?', [jsonDates, listingId]);
+      res.json({ message: 'Blocked dates updated', blocked_dates: blocked_dates || [] });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Failed to update blocked dates' });
+    }
+  });
+
+  // HANDOVER CHECKLIST UPDATE
+  app.post('/api/rental-requests/:id/handover', authenticateToken, async (req: any, res: Response) => {
+    try {
+      const reqId = Number(req.params.id);
+      const { stage, items_checked, notes } = req.body; // stage: 'pickup' | 'return'
+
+      const rentalReq = await queryOne('SELECT * FROM rental_requests WHERE id = ?', [reqId]);
+      if (!rentalReq) return res.status(404).json({ error: 'Rental request not found' });
+
+      let handoverData: any = {};
+      try {
+        handoverData = JSON.parse(rentalReq.handover_notes || '{}');
+      } catch {
+        handoverData = {};
+      }
+
+      if (stage === 'pickup') {
+        handoverData.pickup = {
+          items_checked: items_checked || [],
+          notes: notes || '',
+          completed_at: new Date().toISOString(),
+          completed_by: req.user.name
+        };
+        await runSql('UPDATE rental_requests SET handover_pickup_status = "completed", handover_notes = ? WHERE id = ?', [JSON.stringify(handoverData), reqId]);
+      } else if (stage === 'return') {
+        handoverData.return = {
+          items_checked: items_checked || [],
+          notes: notes || '',
+          completed_at: new Date().toISOString(),
+          completed_by: req.user.name
+        };
+        await runSql('UPDATE rental_requests SET handover_return_status = "completed", status = "completed", handover_notes = ? WHERE id = ?', [JSON.stringify(handoverData), reqId]);
+      }
+
+      const updatedReq = await queryOne('SELECT * FROM rental_requests WHERE id = ?', [reqId]);
+      res.json({ message: 'Handover checklist saved', rental_request: updatedReq });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Failed to update handover checklist' });
+    }
+  });
+
   async function handleCreateRentalRequest(req: any, res: Response) {
-    const { listing_id, start_date, end_date, payment_method, card_last_four } = req.body;
+    const { listing_id, start_date, end_date, payment_method, card_last_four, insurance_plan, insurance_fee } = req.body;
     const listing = await queryOne('SELECT * FROM listings WHERE id = ?', [listing_id]);
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
 
@@ -1373,16 +1599,22 @@ async function startServer() {
     const end = new Date(end_date || Date.now());
     const diffTime = Math.abs(end.getTime() - start.getTime());
     const totalDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
-    const totalPrice = totalDays * (listing.daily_rate || 0);
+    
+    const plan = String(insurance_plan || 'peace_of_mind');
+    const perDayFee = Number(insurance_fee) >= 0 ? Number(insurance_fee) : (plan === 'peace_of_mind' ? 5 : plan === 'all_risk' ? 10 : 0);
+    const totalInsuranceFee = totalDays * perDayFee;
+
+    const baseRentalTotal = totalDays * (listing.daily_rate || 0);
+    const totalPrice = baseRentalTotal + totalInsuranceFee;
 
     const method = String(payment_method || 'card');
     const lastFour = String(card_last_four || (method === 'card' ? '4242' : '----'));
     const payStatus = method === 'cash' ? 'pending_in_person' : 'paid';
 
     const { lastID } = await runSql(`
-      INSERT INTO rental_requests (listing_id, renter_id, owner_id, start_date, end_date, total_days, total_price, security_deposit, status, payment_method, payment_status, card_last_four)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
-    `, [listing_id, req.user?.id || 1, listing.user_id, start_date || '2026-08-01', end_date || '2026-08-05', totalDays, totalPrice, listing.security_deposit || 0, method, payStatus, lastFour]);
+      INSERT INTO rental_requests (listing_id, renter_id, owner_id, start_date, end_date, total_days, total_price, security_deposit, status, payment_method, payment_status, card_last_four, insurance_plan, insurance_fee)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)
+    `, [listing_id, req.user?.id || 1, listing.user_id, start_date || '2026-08-01', end_date || '2026-08-05', totalDays, totalPrice, listing.security_deposit || 0, method, payStatus, lastFour, plan, totalInsuranceFee]);
 
     const newRequest = await queryOne('SELECT * FROM rental_requests WHERE id = ?', [lastID]);
     res.status(201).json(newRequest);

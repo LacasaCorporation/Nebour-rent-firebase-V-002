@@ -595,14 +595,14 @@ function statusBadge(status?: string) {
 
             <div class="mt-3 pt-3 border-t border-warm-100 flex items-center gap-2">
               <button
-                @click="router.push(`/listings/${selectedListing.id}`)"
+                @click="selectedListing?.id && router.push(`/listings/${selectedListing.id}`)"
                 class="flex-1 py-2 bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs rounded-xl transition-all text-center"
               >
                 View Listing
               </button>
 
               <button
-                @click.stop="openDirections(selectedListing)"
+                @click.stop="selectedListing && openDirections(selectedListing)"
                 class="px-2.5 py-2 bg-brand-50 hover:bg-brand-100 text-brand-700 font-bold text-xs rounded-xl border border-brand-200 transition-all flex items-center gap-1 shrink-0"
                 title="Get Directions on Google Maps"
               >
@@ -610,12 +610,12 @@ function statusBadge(status?: string) {
               </button>
 
               <button
-                @click="favoritesStore.toggleFavorite(selectedListing.id)"
+                @click="selectedListing?.id && favoritesStore.toggleFavorite(selectedListing.id)"
                 class="p-2 bg-warm-100 hover:bg-rose-50 text-warm-700 hover:text-rose-600 rounded-xl transition-all"
-                :title="favoritesStore.isFavorited(selectedListing.id) ? 'Remove Wishlist' : 'Save Wishlist'"
+                :title="selectedListing?.id && favoritesStore.isFavorited(selectedListing.id) ? 'Remove Wishlist' : 'Save Wishlist'"
               >
                 <svg
-                  :class="['w-4 h-4', favoritesStore.isFavorited(selectedListing.id) ? 'text-rose-500 fill-rose-500' : 'text-warm-500']"
+                  :class="['w-4 h-4', selectedListing?.id && favoritesStore.isFavorited(selectedListing.id) ? 'text-rose-500 fill-rose-500' : 'text-warm-500']"
                   fill="none"
                   stroke="currentColor"
                   stroke-width="2"

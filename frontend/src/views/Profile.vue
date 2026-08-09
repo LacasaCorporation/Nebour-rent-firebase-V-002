@@ -4,6 +4,10 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth.js'
 import api, { listingsAPI } from '../services/api.js'
 import ListingCard from '../components/ListingCard.vue'
+import IdentityBadge from '../components/IdentityBadge.vue'
+import IdentityVerificationModal from '../components/IdentityVerificationModal.vue'
+import RentalAgreementPdfModal from '../components/RentalAgreementPdfModal.vue'
+import HandoverChecklistModal from '../components/HandoverChecklistModal.vue'
 import { listingFirstImage } from '../utils/imageUrl.js'
 
 const authStore = useAuthStore()
@@ -11,6 +15,27 @@ const router = useRouter()
 const user = computed(() => authStore.currentUser)
 
 const activeTab = ref('listings') // 'listings' | 'active-rentals' | 'history'
+
+// Modals
+const showVerifyModal = ref(false)
+
+const selectedContractRental = ref(null)
+const showContractModal = ref(false)
+
+function openContractModal(rental) {
+  selectedContractRental.value = rental
+  showContractModal.value = true
+}
+
+const selectedHandoverRental = ref(null)
+const handoverStage = ref('pickup')
+const showHandoverModal = ref(false)
+
+function openHandoverModal(rental, stage = 'pickup') {
+  selectedHandoverRental.value = rental
+  handoverStage.value = stage
+  showHandoverModal.value = true
+}
 
 // Data state
 const listings = ref([])
@@ -157,11 +182,20 @@ onMounted(() => {
             {{ user.name?.charAt(0).toUpperCase() }}
           </div>
           <div class="space-y-1">
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 flex-wrap">
               <h1 class="text-2xl font-bold text-warm-900">{{ user.name }}</h1>
-              <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-brand-50 text-brand-700 border border-brand-200">
-                Verified Member
-              </span>
+              <IdentityBadge
+                :is-verified="user.is_id_verified !== false"
+                :badge-type="user.id_badge_type || 'trusted_lender'"
+                size="md"
+              />
+              <button
+                @click="showVerifyModal = true"
+                class="px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-all flex items-center gap-1 cursor-pointer"
+              >
+                <span>🛡️</span>
+                <span>{{ user.is_id_verified ? 'Re-Verify Identity' : 'Verify ID & Get Badge' }}</span>
+              </button>
             </div>
             <p class="text-sm text-warm-500">{{ user.email }}</p>
             <div class="flex flex-wrap items-center gap-4 text-xs text-warm-500 pt-1">
@@ -489,6 +523,26 @@ onMounted(() => {
               >
                 View Listing details &rarr;
               </RouterLink>
+
+              <!-- Exportable PDF Contract & Invoice Button -->
+              <button
+                v-if="['accepted', 'active', 'completed'].includes(r.status)"
+                @click="openContractModal(r)"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors border border-slate-200 cursor-pointer"
+              >
+                <span>📄</span>
+                <span>Agreement PDF</span>
+              </button>
+
+              <!-- Interactive Handover Checklist Button -->
+              <button
+                v-if="['accepted', 'active'].includes(r.status)"
+                @click="openHandoverModal(r, r.status === 'accepted' ? 'pickup' : 'return')"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors border border-emerald-200 cursor-pointer"
+              >
+                <span>📦</span>
+                <span>{{ r.status === 'accepted' ? 'Pickup Inspection' : 'Return Inspection' }}</span>
+              </button>
             </div>
 
             <!-- Dynamic Action buttons -->
@@ -749,4 +803,27 @@ onMounted(() => {
       </div>
     </div>
   </div>
+
+  <!-- Identity Verification Modal -->
+  <IdentityVerificationModal
+    :is-open="showVerifyModal"
+    @close="showVerifyModal = false"
+    @verified="fetchAllData"
+  />
+
+  <!-- Printable PDF Agreement & Invoice Modal -->
+  <RentalAgreementPdfModal
+    :is-open="showContractModal"
+    :rental="selectedContractRental"
+    @close="showContractModal = false"
+  />
+
+  <!-- Handover Inspection Checklist Modal -->
+  <HandoverChecklistModal
+    :is-open="showHandoverModal"
+    :rental="selectedHandoverRental"
+    :stage="handoverStage"
+    @close="showHandoverModal = false"
+    @updated="fetchAllData"
+  />
 </template>

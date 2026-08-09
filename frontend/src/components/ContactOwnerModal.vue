@@ -62,8 +62,8 @@ async function handleSendMessage() {
   try {
     const payload = {
       receiver_id: ownerId.value,
-      content: `[Inquiry regarding "${props.listing.title}"]\n${messageContent.value.trim()}`,
-      listing_id: props.listing.id
+      content: `[Inquiry regarding "${props.listing?.title || 'Item'}"]\n${messageContent.value.trim()}`,
+      listing_id: props.listing?.id
     }
 
     await api.post('/messages', payload)

@@ -32,7 +32,7 @@ export function useFavoritesStore() {
     try {
       const res = await favoritesAPI.getAll()
       const list = res.data?.data || res.data || []
-      const ids = list.map((item) => Number(item.listing?.id || item.listing_id || item.id))
+      const ids = list.map((item) => Number(item?.listing?.id || item?.listing_id || item?.id))
       favoritedIds.value = new Set(ids.filter(Boolean))
       initialized.value = true
     } catch (e) {

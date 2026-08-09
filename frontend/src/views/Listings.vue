@@ -57,6 +57,7 @@ const categories = ref<any[]>([{ id: '', name: 'All', slug: '' }])
 
 const sortOptions = [
   { value: 'newest', label: 'Newest first', field: 'created_at', direction: 'desc' },
+  { value: 'distance', label: '📍 Nearest to me', field: 'distance', direction: 'asc' },
   { value: 'price_low', label: 'Price: low to high', field: 'daily_rate', direction: 'asc' },
   { value: 'price_high', label: 'Price: high to low', field: 'daily_rate', direction: 'desc' },
 ]
@@ -123,6 +124,16 @@ async function fetchListings() {
     }
     if (searchQuery.value) params.search = searchQuery.value.trim()
     if (selectedCategoryId.value) params.category_id = selectedCategoryId.value
+
+    const savedLat = (route.query.user_lat as string) || (route.query.lat as string) || localStorage.getItem('user_lat')
+    const savedLng = (route.query.user_lng as string) || (route.query.lng as string) || localStorage.getItem('user_lng')
+    if (savedLat && savedLng) {
+      params.user_lat = savedLat
+      params.user_lng = savedLng
+    }
+    if (route.query.max_distance_km) {
+      params.max_distance_km = route.query.max_distance_km
+    }
 
     const response = await listingsAPI.getAll(params)
     const data = response.data

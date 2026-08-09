@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { listingFirstImage } from '../utils/imageUrl'
 import { useFavoritesStore } from '../stores/favorites'
+import IdentityBadge from './IdentityBadge.vue'
 import CalendarPicker from './CalendarPicker.vue'
 
 const router = useRouter()
@@ -87,25 +88,25 @@ const rentalDays = computed(() => {
 })
 
 const totalCost = computed(() => {
-  return rentalDays.value * Number(props.listing.daily_rate || 0)
+  return rentalDays.value * Number(props.listing?.daily_rate || 0)
 })
 
 const favorited = computed(() => {
   if (props.isFavorited !== undefined) return props.isFavorited
-  return favoritesStore.isFavorited(props.listing.id)
+  return props.listing?.id ? favoritesStore.isFavorited(props.listing.id) : false
 })
 
 const primaryImage = computed(() => {
-  return listingFirstImage(props.listing)
+  return props.listing ? listingFirstImage(props.listing) : ''
 })
 
 const categoryLabel = computed(() => {
-  return props.listing.category?.name || 'Other'
+  return props.listing?.category?.name || 'Other'
 })
 
 // Status indicator configuration
 const statusConfig = computed(() => {
-  const status = (props.listing.status || 'available').toLowerCase()
+  const status = (props.listing?.status || 'available').toLowerCase()
   if (status === 'rented' || status === 'currently rented' || status === 'unavailable') {
     return {
       label: 'Currently Rented',
@@ -132,12 +133,14 @@ const statusConfig = computed(() => {
 
 function handleFavoriteClick(e: MouseEvent) {
   e.stopPropagation()
+  if (!props.listing?.id) return
   favoritesStore.toggleFavorite(props.listing.id)
   emit('toggle-favorite', props.listing.id)
 }
 
 function handleRent(e: MouseEvent) {
   e.stopPropagation()
+  if (!props.listing?.id) return
   emit('rent', { listing: props.listing, startDate: startDate.value, endDate: endDate.value })
   router.push({
     path: `/listings/${props.listing.id}`,
@@ -154,7 +157,7 @@ function toggleCalendar(e: MouseEvent) {
 <template>
   <div
     class="bg-white rounded-xl border border-warm-200 overflow-hidden hover:shadow-card-hover transition-all duration-200 cursor-pointer group flex flex-col justify-between"
-    @click="router.push(`/listings/${listing.id}`)"
+    @click="listing?.id && router.push(`/listings/${listing.id}`)"
   >
     <div>
       <!-- Image & Badges -->
@@ -162,7 +165,7 @@ function toggleCalendar(e: MouseEvent) {
         <img
           v-if="primaryImage"
           :src="primaryImage"
-          :alt="listing.title"
+          :alt="listing?.title || 'Listing'"
           class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
         />
         <div v-else class="w-full h-full flex items-center justify-center bg-warm-100">
@@ -183,7 +186,7 @@ function toggleCalendar(e: MouseEvent) {
 
           <!-- Category Badge -->
           <div
-            v-if="listing.category"
+            v-if="listing?.category"
             class="px-2.5 py-1 bg-white/90 text-warm-800 text-[11px] font-semibold rounded-full shadow-xs backdrop-blur-md"
           >
             {{ categoryLabel }}
@@ -193,7 +196,7 @@ function toggleCalendar(e: MouseEvent) {
         <!-- Compare & Wishlist Action Buttons -->
         <div class="absolute top-3 right-3 flex items-center gap-1.5 z-10">
           <button
-            @click.stop="emit('toggle-compare', listing.id)"
+            @click.stop="listing?.id && emit('toggle-compare', listing.id)"
             :title="isCompared ? 'Remove from comparison' : 'Compare pricing side-by-side'"
             class="px-2.5 py-1.5 rounded-full text-[11px] font-bold backdrop-blur-md transition-all shadow-md cursor-pointer flex items-center gap-1"
             :class="isCompared ? 'bg-brand-600 text-white ring-2 ring-brand-300' : 'bg-white/90 text-warm-700 hover:bg-white hover:text-brand-600'"
@@ -231,36 +234,49 @@ function toggleCalendar(e: MouseEvent) {
         <!-- Title + Price row -->
         <div class="flex items-start justify-between gap-2 mb-2">
           <h3 class="font-bold text-warm-900 text-[15px] leading-snug line-clamp-2 group-hover:text-brand-600 transition-colors">
-            {{ listing.title }}
+            {{ listing?.title }}
           </h3>
           <div class="text-right shrink-0">
             <p class="font-bold text-warm-900 text-[15px]">
-              ${{ Number(listing.daily_rate).toFixed(0) }}
+              ${{ Number(listing?.daily_rate || 0).toFixed(0) }}
             </p>
             <p class="text-warm-400 text-[11px] font-medium">/day</p>
           </div>
         </div>
 
         <!-- Owner + Location -->
-        <div class="flex items-center gap-2 text-xs text-warm-500">
-          <span v-if="listing.user" class="flex items-center gap-1 font-medium">
+        <div class="flex items-center gap-2 text-xs text-warm-500 flex-wrap">
+          <span v-if="listing?.user" class="flex items-center gap-1 font-medium">
             <svg class="w-3.5 h-3.5 text-warm-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
             </svg>
             {{ listing.user.name }}
           </span>
-          <span v-if="listing.user && listing.location" class="text-warm-300">&middot;</span>
-          <span v-if="listing.location" class="flex items-center gap-1 truncate">
+          <IdentityBadge
+            v-if="listing?.user"
+            :is-verified="listing.user.is_id_verified !== false"
+            :badge-type="listing.user.id_badge_type || 'trusted_lender'"
+            size="sm"
+          />
+          <span v-if="listing?.user && listing?.location" class="text-warm-300">&middot;</span>
+          <span v-if="listing?.location" class="flex items-center gap-1 truncate">
             <svg class="w-3.5 h-3.5 text-warm-400 shrink-0" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
               <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
             </svg>
             <span class="truncate">{{ listing.location }}</span>
           </span>
+          <span
+            v-if="listing?.distance_km !== null && listing?.distance_km !== undefined"
+            class="px-2 py-0.5 bg-brand-50 text-brand-700 text-[10px] font-bold rounded-full border border-brand-200/60 shrink-0 flex items-center gap-1"
+          >
+            <span>📍</span>
+            <span>{{ listing.distance_km }} km away</span>
+          </span>
         </div>
 
         <!-- Rating & Community Trust Badge -->
-        <div v-if="listing.rating" class="flex items-center gap-1.5 mt-2">
+        <div v-if="listing?.rating" class="flex items-center gap-1.5 mt-2">
           <div class="inline-flex items-center gap-1 text-amber-700 font-bold text-xs bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/60">
             <svg class="w-3.5 h-3.5 fill-amber-400" viewBox="0 0 20 20">
               <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
@@ -274,7 +290,7 @@ function toggleCalendar(e: MouseEvent) {
 
         <!-- Description preview -->
         <p
-          v-if="listing.description"
+          v-if="listing?.description"
           class="mt-2.5 text-xs text-warm-500 leading-relaxed line-clamp-2"
         >
           {{ listing.description }}

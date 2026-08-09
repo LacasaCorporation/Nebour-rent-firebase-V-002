@@ -128,7 +128,7 @@ function goToDetail(id) {
                 </button>
 
                 <!-- Best Value Tag -->
-                <div v-if="item.id === summary.best_value_listing_id" class="mb-2">
+                <div v-if="summary && item.id === summary.best_value_listing_id" class="mb-2">
                   <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-brand-600 text-white shadow-2xs">
                     🏆 Overall Best Value
                   </span>

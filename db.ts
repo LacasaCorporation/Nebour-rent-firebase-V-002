@@ -144,9 +144,20 @@ export async function initDatabase() {
     { name: 'company_id', spec: "INTEGER DEFAULT NULL" },
     { name: 'lat', spec: "REAL DEFAULT NULL" },
     { name: 'lng', spec: "REAL DEFAULT NULL" },
+    { name: 'blocked_dates', spec: "TEXT DEFAULT '[]'" },
   ];
   for (const c of colsToEnsure) {
     try { db.run(`ALTER TABLE listings ADD COLUMN ${c.name} ${c.spec}`); } catch {}
+  }
+
+  const userCols = [
+    { name: 'is_id_verified', spec: "INTEGER DEFAULT 1" },
+    { name: 'id_badge_type', spec: "TEXT DEFAULT 'trusted_lender'" },
+    { name: 'id_verified_at', spec: "TEXT DEFAULT '2026-01-15'" },
+    { name: 'id_document_type', spec: "TEXT DEFAULT 'drivers_license'" }
+  ];
+  for (const c of userCols) {
+    try { db.run(`ALTER TABLE users ADD COLUMN ${c.name} ${c.spec}`); } catch {}
   }
 
   // Create Companies Table
@@ -214,7 +225,12 @@ export async function initDatabase() {
   const reqCols = [
     { name: 'payment_method', spec: "TEXT DEFAULT 'card'" },
     { name: 'payment_status', spec: "TEXT DEFAULT 'paid'" },
-    { name: 'card_last_four', spec: "TEXT DEFAULT '4242'" }
+    { name: 'card_last_four', spec: "TEXT DEFAULT '4242'" },
+    { name: 'insurance_plan', spec: "TEXT DEFAULT 'peace_of_mind'" },
+    { name: 'insurance_fee', spec: "REAL DEFAULT 15" },
+    { name: 'handover_pickup_status', spec: "TEXT DEFAULT 'completed'" },
+    { name: 'handover_return_status', spec: "TEXT DEFAULT 'pending'" },
+    { name: 'handover_notes', spec: "TEXT DEFAULT '{\"pickup_verified\": true, \"items_checked\": [\"Physical condition inspected\", \"Serial number verified\", \"Accessories handed over\"], \"notes\": \"In perfect condition at pickup.\"}'" }
   ];
   for (const c of reqCols) {
     try { db.run(`ALTER TABLE rental_requests ADD COLUMN ${c.name} ${c.spec}`); } catch {}

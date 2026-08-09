@@ -91,6 +91,7 @@ const rentalStartDate = ref('')
 const rentalEndDate = ref('')
 const rentalMessage = ref('')
 const selectedPaymentMethod = ref('card')
+const selectedInsuranceTier = ref('peace_of_mind')
 const cardDetails = ref({ cardNumber: '', expiry: '', cvv: '', cardLastFour: '4242' })
 const submitting = ref(false)
 
@@ -103,6 +104,11 @@ const rentalTotalDays = computed(() => {
   if (isNaN(s.getTime()) || isNaN(e.getTime())) return 1
   const diff = Math.abs(e.getTime() - s.getTime())
   return Math.max(1, Math.ceil(diff / (1000 * 60 * 60 * 24)))
+})
+
+const calculatedInsuranceFee = computed(() => {
+  const perDay = selectedInsuranceTier.value === 'peace_of_mind' ? 5 : selectedInsuranceTier.value === 'all_risk' ? 10 : 0
+  return perDay * rentalTotalDays.value
 })
 
 watch(rentalDates, (val) => {
@@ -191,13 +197,15 @@ async function submitRental() {
       end_date: rentalEndDate.value,
       message: rentalMessage.value || null,
       payment_method: selectedPaymentMethod.value,
-      card_last_four: cardDetails.value?.cardLastFour || '4242'
+      card_last_four: cardDetails.value?.cardLastFour || '4242',
+      insurance_plan: selectedInsuranceTier.value,
+      insurance_fee: calculatedInsuranceFee.value
     })
     showRentModal.value = false
     rentalStartDate.value = ''
     rentalEndDate.value = ''
     rentalMessage.value = ''
-    toast.success('Rental request & payment submitted!')
+    toast.success('Rental request & protection tier confirmed!')
   } catch (e) {
     toast.error(e.response?.data?.message || 'Failed to submit request')
   } finally {
@@ -707,6 +715,52 @@ async function confirmDelete() {
               v-model="rentalDates"
               :blocked-dates="blockedDates"
             />
+
+            <!-- Protection & Damage Deposit Tier Options -->
+            <div class="space-y-2 bg-warm-50/70 p-3.5 rounded-2xl border border-warm-200">
+              <label class="block text-xs font-bold text-warm-800 uppercase tracking-wider flex items-center justify-between">
+                <span>🛡️ Protection & Security Deposit Tier</span>
+                <span class="text-[10px] text-emerald-600 font-bold" v-if="calculatedInsuranceFee > 0">+${{ calculatedInsuranceFee }} Insurance</span>
+              </label>
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <!-- Tier 1: Standard Hold -->
+                <button
+                  type="button"
+                  @click="selectedInsuranceTier = 'basic'"
+                  :class="selectedInsuranceTier === 'basic' ? 'border-brand-500 bg-brand-50/60 ring-2 ring-brand-400' : 'border-warm-200 bg-white hover:bg-warm-100/50'"
+                  class="p-2.5 rounded-xl border text-left transition-all relative cursor-pointer"
+                >
+                  <div class="text-[11px] font-bold text-warm-900">Standard Hold</div>
+                  <p class="text-[10px] text-warm-500 mt-0.5">$0/day protection</p>
+                  <p class="text-[10px] font-bold text-amber-700 mt-1">${{ listing?.security_deposit || 0 }} deposit hold</p>
+                </button>
+
+                <!-- Tier 2: Peace of Mind ($5/day) -->
+                <button
+                  type="button"
+                  @click="selectedInsuranceTier = 'peace_of_mind'"
+                  :class="selectedInsuranceTier === 'peace_of_mind' ? 'border-brand-500 bg-brand-50/60 ring-2 ring-brand-400' : 'border-warm-200 bg-white hover:bg-warm-100/50'"
+                  class="p-2.5 rounded-xl border text-left transition-all relative cursor-pointer"
+                >
+                  <span class="absolute -top-2 right-2 px-1.5 py-0.2 bg-emerald-500 text-white text-[9px] font-extrabold rounded-full shadow-xs">POPULAR</span>
+                  <div class="text-[11px] font-bold text-warm-900">Peace of Mind</div>
+                  <p class="text-[10px] text-emerald-600 font-bold mt-0.5">+$5/day waiver</p>
+                  <p class="text-[10px] text-warm-500 mt-1">Covers minor damage</p>
+                </button>
+
+                <!-- Tier 3: Zero Liability ($10/day) -->
+                <button
+                  type="button"
+                  @click="selectedInsuranceTier = 'all_risk'"
+                  :class="selectedInsuranceTier === 'all_risk' ? 'border-brand-500 bg-brand-50/60 ring-2 ring-brand-400' : 'border-warm-200 bg-white hover:bg-warm-100/50'"
+                  class="p-2.5 rounded-xl border text-left transition-all relative cursor-pointer"
+                >
+                  <div class="text-[11px] font-bold text-warm-900">Zero Liability</div>
+                  <p class="text-[10px] text-brand-600 font-bold mt-0.5">+$10/day protection</p>
+                  <p class="text-[10px] text-warm-500 mt-1">All-risk covered</p>
+                </button>
+              </div>
+            </div>
 
             <!-- Payment Method Selector -->
             <PaymentMethodSelector

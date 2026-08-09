@@ -4,10 +4,13 @@ import { useRouter } from 'vue-router'
 import { categoriesAPI, listingsAPI } from '../services/api.js'
 import CalendarPicker from '../components/CalendarPicker.vue'
 import AddressLocationPicker from '../components/AddressLocationPicker.vue'
+import AiSmartValuerModal from '../components/AiSmartValuerModal.vue'
 import { useToast } from '../composables/useToast'
 
 const router = useRouter()
 const toast = useToast()
+const showAiModal = ref(false)
+
 const form = ref({
   title: '',
   description: '',
@@ -25,6 +28,14 @@ const form = ref({
   available_to: '',
   agreement_text: '',
 })
+
+function applyAiSuggestions(data) {
+  if (data.title) form.value.title = data.title
+  if (data.description) form.value.description = data.description
+  if (data.daily_rate) form.value.daily_rate = data.daily_rate
+  if (data.security_deposit) form.value.security_deposit = data.security_deposit
+  toast.success('AI suggestions applied to your listing form!')
+}
 const imageFiles = ref([])
 const imagePreviews = ref([])
 const agreementFile = ref(null)
@@ -122,8 +133,24 @@ async function submitForm() {
     </button>
 
     <div class="bg-white/70 backdrop-blur-sm rounded-2xl border border-warm-200 p-8">
-      <h1 class="text-2xl font-bold text-warm-900 mb-1">Create Listing</h1>
-      <p class="text-sm text-warm-500 mb-8">Share something from your home with your neighbors</p>
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 class="text-2xl font-bold text-warm-900 mb-1">Create Listing</h1>
+          <p class="text-sm text-warm-500">Share something from your home with your neighbors</p>
+        </div>
+
+        <!-- AI Assistant Banner Button -->
+        <button
+          type="button"
+          @click="showAiModal = true"
+          class="px-4 py-2.5 bg-gradient-to-r from-amber-500 via-brand-500 to-yellow-500 hover:opacity-95 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 border border-white/20 shrink-0"
+        >
+          <svg class="w-4 h-4 text-white animate-bounce" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+          </svg>
+          <span>✨ AI Smart Valuer & Assistant</span>
+        </button>
+      </div>
 
       <form @submit.prevent="submitForm" class="space-y-5">
         <!-- Title -->
@@ -371,5 +398,14 @@ async function submitForm() {
         </button>
       </form>
     </div>
+
+    <!-- AI Smart Valuer Modal -->
+    <AiSmartValuerModal
+      :is-open="showAiModal"
+      :initial-title="form.title"
+      :image-preview="imagePreviews[0] || ''"
+      @close="showAiModal = false"
+      @apply="applyAiSuggestions"
+    />
   </div>
 </template>
