@@ -1,10 +1,11 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { companiesAPI, listingsAPI } from '../services/api'
 import { useAuthStore } from '../stores/auth'
 import { listingImageUrl } from '../utils/imageUrl'
 import Modal from '../components/Modal.vue'
+import CompanySocialAdBanner from '../components/CompanySocialAdBanner.vue'
 import { useToast } from '../composables/useToast'
 
 const router = useRouter()
@@ -462,6 +463,8 @@ function imgUrl(file: File) {
 
         <!-- Company detail -->
         <div v-else class="space-y-6">
+          <CompanySocialAdBanner :company="selectedCompany" />
+
           <!-- Company header card -->
           <div class="bg-white rounded-2xl border border-warm-200 overflow-hidden">
             <!-- Cover image -->

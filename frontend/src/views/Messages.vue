@@ -25,7 +25,7 @@ const hasMore = ref(false)
 const loadingOlder = ref(false)
 const attachment = ref(null)
 
-const currentUserId = computed(() => authStore.currentUser?.id)
+const currentUserId = computed(() => authStore.currentUser.value?.id)
 
 function onScroll() {
   if (messagesContainer.value && messagesContainer.value.scrollTop < 50) {

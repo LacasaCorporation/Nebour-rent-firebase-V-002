@@ -64,10 +64,17 @@ const isAvailable = computed(() => {
 
       <!-- Status badge -->
       <div
-        v-if="!isAvailable"
-        class="absolute top-3 left-3 px-2.5 py-1 bg-warm-800/80 text-white text-xs font-medium rounded-full backdrop-blur-sm"
+        class="absolute top-3 left-3 px-2.5 py-1 text-[11px] font-bold rounded-full backdrop-blur-md flex items-center gap-1.5 shadow-sm"
+        :class="
+          isAvailable
+            ? 'bg-emerald-500/95 text-white'
+            : (product.status === 'rented' || product.status === 'currently rented' || product.status === 'unavailable')
+            ? 'bg-amber-500/95 text-white'
+            : 'bg-rose-500/95 text-white'
+        "
       >
-        {{ product.status === 'rented' ? 'Rented' : 'Maintenance' }}
+        <span :class="['w-1.5 h-1.5 rounded-full', isAvailable ? 'bg-emerald-200 animate-pulse' : 'bg-amber-200']"></span>
+        <span>{{ isAvailable ? 'Available' : (product.status === 'rented' || product.status === 'currently rented' || product.status === 'unavailable') ? 'Currently Rented' : 'Maintenance' }}</span>
       </div>
 
       <!-- Category tag -->

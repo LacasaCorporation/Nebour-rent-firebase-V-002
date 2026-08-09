@@ -87,10 +87,11 @@ function timeAgo(date: string | Date): string {
 
 const navLinks = computed(() => {
   if (isAuthenticated.value) {
-    return [
+    const links = [
       { to: '/', label: 'Explore', icon: 'search' },
       { to: '/listings', label: 'Browse', icon: 'grid' },
       { to: '/map', label: 'Map', icon: 'map' },
+      { to: '/jackpot', label: 'Jackpot 🎰', icon: 'sparkles' },
       { to: '/my-rentals', label: 'Rentals', icon: 'calendar' },
       { to: '/products', label: 'Products', icon: 'box' },
       { to: '/create-listing', label: 'List', icon: 'plus' },
@@ -98,11 +99,16 @@ const navLinks = computed(() => {
       { to: '/messages', label: 'Inbox', icon: 'message' },
       { to: '/settings', label: 'Settings', icon: 'gear' },
     ]
+    if (user.value?.is_admin === 1 || user.value?.is_admin === true || user.value?.email === 'admin@mail.com') {
+      links.push({ to: '/admin', label: 'Admin 🔑', icon: 'key' })
+    }
+    return links
   }
   return [
     { to: '/', label: 'Explore', icon: 'search' },
     { to: '/listings', label: 'Browse', icon: 'grid' },
     { to: '/map', label: 'Map', icon: 'map' },
+    { to: '/jackpot', label: 'Jackpot 🎰', icon: 'sparkles' },
     { to: '/products', label: 'Products', icon: 'box' },
   ]
 })

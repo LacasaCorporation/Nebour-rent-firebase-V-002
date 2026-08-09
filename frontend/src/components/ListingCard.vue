@@ -106,9 +106,9 @@ const categoryLabel = computed(() => {
 // Status indicator configuration
 const statusConfig = computed(() => {
   const status = (props.listing.status || 'available').toLowerCase()
-  if (status === 'rented' || status === 'unavailable') {
+  if (status === 'rented' || status === 'currently rented' || status === 'unavailable') {
     return {
-      label: 'Rented',
+      label: 'Currently Rented',
       badgeClass: 'bg-amber-500/95 text-white shadow-xs',
       dotClass: 'bg-amber-200',
       isAvailable: false

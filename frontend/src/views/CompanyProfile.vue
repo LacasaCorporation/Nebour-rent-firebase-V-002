@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { companiesAPI } from '../services/api'
 import { listingImageUrl } from '../utils/imageUrl'
 import ShareButtons from '../components/ShareButtons.vue'
+import CompanySocialAdBanner from '../components/CompanySocialAdBanner.vue'
 import { useAuthStore } from '../stores/auth'
 import { useToast } from '../composables/useToast'
 
@@ -116,6 +117,9 @@ function shareUrl() {
 
     <!-- Company Profile -->
     <div v-else-if="company" class="space-y-8">
+      <!-- Public Social Media & Advertising Banner -->
+      <CompanySocialAdBanner :company="company" />
+
       <!-- Header -->
       <div class="bg-white rounded-2xl border border-warm-200 p-8">
         <div class="flex flex-col sm:flex-row sm:items-start gap-6">

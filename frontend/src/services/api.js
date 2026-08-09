@@ -1,4 +1,7 @@
 import axios from 'axios';
+import { useGlobalLoading } from '../composables/useGlobalLoading';
+
+const { startRequest, finishRequest } = useGlobalLoading();
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api',
@@ -8,6 +11,9 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
+  if (!config.skipLoading) {
+    startRequest();
+  }
   const token = localStorage.getItem('token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -18,11 +24,22 @@ api.interceptors.request.use((config) => {
     config.headers['Content-Type'] = 'application/json';
   }
   return config;
+}, (error) => {
+  finishRequest();
+  return Promise.reject(error);
 });
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    if (!response.config?.skipLoading) {
+      finishRequest();
+    }
+    return response;
+  },
   (error) => {
+    if (!error.config?.skipLoading) {
+      finishRequest();
+    }
     const status = error.response?.status;
     if (status === 401 || status === 419) {
       localStorage.removeItem('token');
@@ -339,4 +356,62 @@ export const rentalsAPI = {
   complete(id) {
     return api.put(`/rental-requests/${id}/complete`);
   },
+};
+
+export const jackpotAPI = {
+  getCurrent() {
+    return api.get('/jackpot/current');
+  },
+  getHistory() {
+    return api.get('/jackpot/history');
+  },
+  getCandidates() {
+    return api.get('/jackpot/candidates');
+  },
+  enter(listingId, weekLabel) {
+    return api.post('/jackpot/enter', { listing_id: listingId, week_label: weekLabel });
+  },
+  runDraw(winnerListingId, weekLabel, prizeDescription) {
+    return api.post('/jackpot/draw', {
+      winner_listing_id: winnerListingId,
+      week_label: weekLabel,
+      prize_description: prizeDescription
+    });
+  },
+  setActive(id) {
+    return api.post(`/jackpot/set-active/${id}`);
+  },
+  delete(id) {
+    return api.delete(`/jackpot/${id}`);
+  }
+};
+
+export const adminAPI = {
+  getStats() {
+    return api.get('/admin/stats');
+  },
+  getUsers() {
+    return api.get('/admin/users');
+  },
+  setUserAdmin(id, isAdmin) {
+    return api.put(`/admin/users/${id}/admin`, { is_admin: isAdmin });
+  },
+  deleteUser(id) {
+    return api.delete(`/admin/users/${id}`);
+  },
+  getListings() {
+    return api.get('/admin/listings');
+  },
+  deleteListing(id) {
+    return api.delete(`/admin/listings/${id}`);
+  },
+  getCompanies() {
+    return api.get('/admin/companies');
+  },
+  setCompanyVerified(id, isVerified) {
+    return api.put(`/admin/companies/${id}/verify`, { is_verified: isVerified });
+  },
+  deleteCompany(id) {
+    return api.delete(`/admin/companies/${id}`);
+  }
 };

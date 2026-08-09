@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import Navbar from './components/Navbar.vue'
 import GlobalHeaderBar from './components/GlobalHeaderBar.vue'
 import ToastContainer from './components/ToastContainer.vue'
+import GlobalLoadingSpinner from './components/GlobalLoadingSpinner.vue'
 import Footer from './components/Footer.vue'
 
 const route = useRoute()
@@ -21,6 +22,7 @@ watch(
   <div class="min-h-screen bg-warm-50 flex flex-col">
     <Navbar />
     <ToastContainer />
+    <GlobalLoadingSpinner />
 
     <!-- Desktop: offset for sidebar -->
     <main class="hidden lg:flex flex-col ml-[80px] flex-1">

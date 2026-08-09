@@ -27,9 +27,8 @@ const error = ref('')
 const deleting = ref(false)
 
 const isOwner = computed(() => {
-  if (!product.value || !authStore.currentUser) return false
-  const currentId = (authStore.currentUser as any)?.id || (authStore.currentUser as any)?.value?.id
-  return product.value.user?.id === currentId
+  if (!product.value || !authStore.currentUser.value) return false
+  return product.value.user?.id === authStore.currentUser.value.id
 })
 
 // Rent modal
@@ -186,14 +185,15 @@ async function deleteProduct() {
               </p>
             </div>
             <span
-              class="shrink-0 text-xs font-medium px-2.5 py-1 rounded-full"
+              class="shrink-0 text-xs font-bold px-3 py-1 rounded-full border shadow-2xs flex items-center gap-1.5"
               :class="{
-                'bg-green-100 text-green-700': product.status === 'available',
-                'bg-amber-100 text-amber-700': product.status === 'rented',
-                'bg-warm-100 text-warm-600': product.status === 'maintenance',
+                'bg-emerald-50 text-emerald-700 border-emerald-200': product.status === 'available',
+                'bg-amber-50 text-amber-800 border-amber-200': product.status === 'rented' || product.status === 'currently rented' || product.status === 'unavailable',
+                'bg-rose-50 text-rose-700 border-rose-200': product.status === 'maintenance',
               }"
             >
-              {{ product.status }}
+              <span :class="['w-2 h-2 rounded-full', product.status === 'available' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500']"></span>
+              <span>{{ product.status === 'available' ? 'Available' : (product.status === 'rented' || product.status === 'currently rented' || product.status === 'unavailable') ? 'Currently Rented' : 'Maintenance' }}</span>
             </span>
           </div>
 

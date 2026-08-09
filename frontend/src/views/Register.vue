@@ -2,9 +2,11 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth.js'
+import { useToast } from '../composables/useToast'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const toast = useToast()
 
 const form = ref({
   name: '',
@@ -16,21 +18,42 @@ const loading = ref(false)
 const error = ref('')
 const errors = ref({})
 
-if (authStore.isAuthenticated.value) router.push('/')
+if (authStore.isAuthenticated) {
+  router.push('/')
+}
 
 async function handleRegister() {
   error.value = ''
   errors.value = {}
+
+  if (form.value.password !== form.value.password_confirmation) {
+    error.value = 'Passwords do not match.'
+    toast.error('Passwords do not match.')
+    return
+  }
+
+  if (form.value.password.length < 4) {
+    error.value = 'Password must be at least 4 characters long.'
+    toast.error('Password must be at least 4 characters long.')
+    return
+  }
+
   loading.value = true
   try {
-    await authStore.register(form.value)
+    await authStore.register({
+      name: form.value.name,
+      email: form.value.email,
+      password: form.value.password
+    })
+    toast.success('Account created successfully! Welcome.')
     router.push('/')
   } catch (e) {
-    if (e.response?.status === 422) {
-      errors.value = e.response.data.errors || {}
-    } else {
-      error.value = e.response?.data?.message || 'Registration failed. Please try again.'
+    const serverMsg = e.response?.data?.error || e.response?.data?.message || e.message || 'Registration failed. Please try again.'
+    error.value = serverMsg
+    if (e.response?.data?.errors) {
+      errors.value = e.response.data.errors
     }
+    toast.error(serverMsg)
   } finally {
     loading.value = false
   }

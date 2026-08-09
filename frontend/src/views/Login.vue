@@ -59,6 +59,29 @@ async function loginAsDemo(demoEmail, demoPassword = 'password') {
             <span class="text-[10px] bg-white/20 text-white px-2 py-0.5 rounded-full font-mono">Password: password</span>
           </div>
 
+          <!-- Main Admin Account Button -->
+          <button
+            @click="loginAsDemo('admin@mail.com')"
+            type="button"
+            class="w-full text-left p-3 rounded-xl bg-gradient-to-r from-amber-500/30 to-yellow-500/30 hover:bg-amber-500/40 border border-amber-300/50 transition-all flex items-center justify-between group shadow-sm"
+          >
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center font-bold text-sm border border-amber-300 shadow">
+                🔑
+              </div>
+              <div>
+                <div class="text-sm font-bold text-amber-100 group-hover:translate-x-0.5 transition-transform flex items-center gap-1.5">
+                  System Admin
+                  <span class="text-[10px] bg-amber-400 text-slate-950 px-1.5 py-0.2 rounded font-black">ADMIN</span>
+                </div>
+                <div class="text-xs text-amber-200/90 font-mono">admin@mail.com</div>
+              </div>
+            </div>
+            <span class="text-xs bg-amber-400 text-slate-950 font-black px-2.5 py-1 rounded-lg hover:bg-amber-300 transition-colors">
+              Admin Login
+            </span>
+          </button>
+
           <!-- Main Demo User Button -->
           <button
             @click="loginAsDemo('demo@example.com')"

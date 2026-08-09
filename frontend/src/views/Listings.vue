@@ -6,6 +6,7 @@ import ListingCardSkeleton from '../components/ListingCardSkeleton.vue'
 import NeighborhoodRentalMap from '../components/NeighborhoodRentalMap.vue'
 import StatsCards from '../components/StatsCards.vue'
 import CompareModal from '../components/CompareModal.vue'
+import JackpotSpotlightBanner from '../components/JackpotSpotlightBanner.vue'
 import { useAuthStore } from '../stores/auth'
 import { listingsAPI, api } from '../services/api'
 import { listingFirstImage } from '../utils/imageUrl'
@@ -235,6 +236,9 @@ function isAvailable(listing: any) {
           </svg>
           <span class="text-warm-600 font-medium">Browse listings</span>
         </nav>
+
+        <!-- Weekly Jackpot Winner Banner -->
+        <JackpotSpotlightBanner />
 
         <!-- Tiny Top Stats Strip -->
         <div class="mb-5">

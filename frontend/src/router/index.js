@@ -26,6 +26,8 @@ const routes = [
   { path: '/my-listings', name: 'MyListings', component: () => import('../views/MyListings.vue'), meta: { requiresAuth: true, title: 'My Listings' } },
   { path: '/my-listings/:id/edit', name: 'EditListing', component: () => import('../views/EditListing.vue'), meta: { requiresAuth: true, title: 'Edit Listing' } },
   { path: '/my-rentals', name: 'MyRentals', component: () => import('../views/MyRentals.vue'), meta: { requiresAuth: true, title: 'My Rentals' } },
+  { path: '/jackpot', name: 'Jackpot', component: () => import('../views/Jackpot.vue'), meta: { title: 'Weekly Jackpot Draw' } },
+  { path: '/admin', name: 'AdminPanel', component: () => import('../views/AdminPanel.vue'), meta: { requiresAuth: true, title: 'Admin Control Panel' } },
 ];
 
 const router = createRouter({

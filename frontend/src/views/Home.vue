@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import ListingCard from '../components/ListingCard.vue'
 import ListingCardSkeleton from '../components/ListingCardSkeleton.vue'
 import StatsCards from '../components/StatsCards.vue'
+import JackpotSpotlightBanner from '../components/JackpotSpotlightBanner.vue'
 import { useAuthStore } from '../stores/auth'
 import { listingsAPI, api } from '../services/api'
 
@@ -181,6 +182,9 @@ function updateCarouselArrows() {
       <div class="absolute inset-0 opacity-[0.25] pointer-events-none" style="background-image: radial-gradient(rgba(68,64,60,0.12) 1px, transparent 1px); background-size: 28px 28px;"></div>
 
       <div class="relative max-w-7xl mx-auto px-6 pt-6 pb-12 lg:pb-20">
+        <!-- Weekly Jackpot Winner Top Banner -->
+        <JackpotSpotlightBanner />
+
         <!-- Tiny Top Stats Strip -->
         <div class="mb-8">
           <StatsCards />

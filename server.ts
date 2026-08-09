@@ -353,28 +353,36 @@ async function startServer() {
 
   // AUTH
   app.post('/api/register', async (req: Request, res: Response) => {
-    const { name, email, password, phone, address } = req.body;
-    if (!email || !password || !name) {
-      return res.status(422).json({ error: 'Name, email, and password are required' });
+    try {
+      const { name, email, password, phone, address } = req.body;
+      const normalizedEmail = (email || '').trim().toLowerCase();
+      const normalizedName = (name || '').trim();
+
+      if (!normalizedEmail || !password || !normalizedName) {
+        return res.status(422).json({ error: 'Name, email, and password are required.' });
+      }
+
+      const existing = await queryOne('SELECT id FROM users WHERE LOWER(email) = ?', [normalizedEmail]);
+      if (existing) {
+        return res.status(422).json({ error: 'This email address is already registered.' });
+      }
+
+      const hash = bcrypt.hashSync(password, 10);
+      const avatar = `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150`;
+
+      const { lastID } = await runSql(
+        'INSERT INTO users (name, email, password, phone, address, is_admin, avatar) VALUES (?, ?, ?, ?, ?, 0, ?)',
+        [normalizedName, normalizedEmail, hash, phone || '', address || '', avatar]
+      );
+
+      const newUser = await queryOne('SELECT id, name, email, phone, address, is_admin, avatar FROM users WHERE id = ?', [lastID]);
+      const token = jwt.sign({ id: newUser.id, email: newUser.email }, JWT_SECRET, { expiresIn: '30d' });
+
+      res.json({ token, user: newUser });
+    } catch (err: any) {
+      console.error('Registration server error:', err);
+      res.status(500).json({ error: err.message || 'Server error during registration' });
     }
-
-    const existing = await queryOne('SELECT id FROM users WHERE email = ?', [email]);
-    if (existing) {
-      return res.status(422).json({ error: 'Email is already registered' });
-    }
-
-    const hash = bcrypt.hashSync(password, 10);
-    const avatar = `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150`;
-
-    const { lastID } = await runSql(
-      'INSERT INTO users (name, email, password, phone, address, is_admin, avatar) VALUES (?, ?, ?, ?, ?, 0, ?)',
-      [name, email, hash, phone || '', address || '', avatar]
-    );
-
-    const newUser = await queryOne('SELECT id, name, email, phone, address, is_admin, avatar FROM users WHERE id = ?', [lastID]);
-    const token = jwt.sign({ id: newUser.id, email: newUser.email }, JWT_SECRET, { expiresIn: '30d' });
-
-    res.json({ token, user: newUser });
   });
 
   app.post('/api/login', async (req: Request, res: Response) => {
@@ -1646,6 +1654,316 @@ async function startServer() {
   app.put('/api/notification-preferences', authenticateToken, (req: any, res: Response) => {
     notificationPreferencesMap[req.user.id] = { user_id: req.user.id, ...req.body };
     res.json(notificationPreferencesMap[req.user.id]);
+  });
+
+  // ------------------ ADMIN PANEL API ------------------
+  const requireAdminMiddleware = async (req: any, res: Response, next: Function) => {
+    try {
+      const u = await queryOne('SELECT is_admin FROM users WHERE id = ?', [req.user.id]);
+      if (!u || (u.is_admin !== 1 && u.is_admin !== true)) {
+        return res.status(403).json({ error: 'Access denied: Admin privileges required.' });
+      }
+      next();
+    } catch {
+      res.status(500).json({ error: 'Failed to verify admin status' });
+    }
+  };
+
+  app.get('/api/admin/stats', authenticateToken, requireAdminMiddleware, async (req: Request, res: Response) => {
+    try {
+      const usersCount = await queryOne<{ count: number }>('SELECT COUNT(*) as count FROM users');
+      const listingsCount = await queryOne<{ count: number }>('SELECT COUNT(*) as count FROM listings');
+      const companiesCount = await queryOne<{ count: number }>('SELECT COUNT(*) as count FROM companies');
+      const rentalsCount = await queryOne<{ count: number }>('SELECT COUNT(*) as count FROM rental_requests');
+      const revenueRow = await queryOne<{ total: number }>('SELECT SUM(total_price) as total FROM rental_requests WHERE status IN ("approved", "completed")');
+
+      res.json({
+        total_users: usersCount?.count || 0,
+        total_listings: listingsCount?.count || 0,
+        total_companies: companiesCount?.count || 0,
+        total_rentals: rentalsCount?.count || 0,
+        total_volume: revenueRow?.total || 0
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/admin/users', authenticateToken, requireAdminMiddleware, async (req: Request, res: Response) => {
+    try {
+      const users = await queryAll(`
+        SELECT u.id, u.name, u.email, u.phone, u.address, u.is_admin, u.avatar, u.created_at,
+               (SELECT COUNT(*) FROM listings WHERE user_id = u.id) as listings_count,
+               (SELECT COUNT(*) FROM rental_requests WHERE renter_id = u.id) as rentals_count
+        FROM users u
+        ORDER BY u.id DESC
+      `);
+      res.json({ users });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put('/api/admin/users/:id/admin', authenticateToken, requireAdminMiddleware, async (req: Request, res: Response) => {
+    try {
+      const { is_admin } = req.body;
+      await runSql('UPDATE users SET is_admin = ? WHERE id = ?', [is_admin ? 1 : 0, req.params.id]);
+      res.json({ message: 'User role updated successfully' });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete('/api/admin/users/:id', authenticateToken, requireAdminMiddleware, async (req: Request, res: Response) => {
+    try {
+      await runSql('DELETE FROM users WHERE id = ?', [req.params.id]);
+      res.json({ message: 'User deleted successfully' });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/admin/listings', authenticateToken, requireAdminMiddleware, async (req: Request, res: Response) => {
+    try {
+      const rows = await queryAll(`
+        SELECT l.*,
+               u.name as user_name, u.email as user_email,
+               c.name as category_name,
+               comp.name as company_name
+        FROM listings l
+        LEFT JOIN users u ON l.user_id = u.id
+        LEFT JOIN categories c ON l.category_id = c.id
+        LEFT JOIN companies comp ON l.company_id = comp.id
+        ORDER BY l.id DESC
+      `);
+      const formatted = rows.map(r => formatListing(r));
+      res.json({ listings: formatted });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete('/api/admin/listings/:id', authenticateToken, requireAdminMiddleware, async (req: Request, res: Response) => {
+    try {
+      await runSql('DELETE FROM listings WHERE id = ?', [req.params.id]);
+      res.json({ message: 'Listing deleted successfully' });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/admin/companies', authenticateToken, requireAdminMiddleware, async (req: Request, res: Response) => {
+    try {
+      const companies = await queryAll(`
+        SELECT c.*, u.name as owner_name, u.email as owner_email,
+               (SELECT COUNT(*) FROM listings WHERE company_id = c.id) as total_listings
+        FROM companies c
+        LEFT JOIN users u ON c.owner_id = u.id
+        ORDER BY c.id DESC
+      `);
+      res.json({ companies });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put('/api/admin/companies/:id/verify', authenticateToken, requireAdminMiddleware, async (req: Request, res: Response) => {
+    try {
+      const { is_verified } = req.body;
+      await runSql('UPDATE companies SET is_verified = ? WHERE id = ?', [is_verified ? 1 : 0, req.params.id]);
+      res.json({ message: 'Company verification status updated' });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete('/api/admin/companies/:id', authenticateToken, requireAdminMiddleware, async (req: Request, res: Response) => {
+    try {
+      await runSql('DELETE FROM companies WHERE id = ?', [req.params.id]);
+      res.json({ message: 'Company deleted successfully' });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ------------------ JACKPOT / WEEKLY SPOTLIGHT DRAW API ------------------
+  app.get('/api/jackpot/current', async (req: Request, res: Response) => {
+    try {
+      const activeDraw = await queryOne(`
+        SELECT jd.*, l.daily_rate, l.description, l.location, l.rating, l.images,
+               u.email as winner_email, u.phone as winner_phone, u.avatar as winner_avatar,
+               c.name as category_name, c.icon as category_icon,
+               comp.name as company_name, comp.slug as company_slug, comp.logo as company_logo
+        FROM jackpot_draws jd
+        LEFT JOIN listings l ON jd.winner_listing_id = l.id
+        LEFT JOIN users u ON jd.winner_user_id = u.id
+        LEFT JOIN categories c ON l.category_id = c.id
+        LEFT JOIN companies comp ON l.company_id = comp.id
+        WHERE jd.is_active = 1
+        ORDER BY jd.id DESC LIMIT 1
+      `);
+
+      // Count entries / candidates
+      const candidatesCountRow = await queryOne<{ count: number }>('SELECT COUNT(*) as count FROM listings WHERE status = "available"');
+      const entriesCountRow = await queryOne<{ count: number }>('SELECT COUNT(*) as count FROM jackpot_entries');
+
+      let listingFormatted = null;
+      if (activeDraw && activeDraw.winner_listing_id) {
+        const fullListingRow = await queryOne(`
+          SELECT l.*,
+                 u.name as user_name, u.email as user_email, u.phone as user_phone, u.avatar as user_avatar,
+                 c.name as category_name, c.slug as category_slug, c.icon as category_icon,
+                 comp.name as company_name, comp.slug as company_slug, comp.logo as company_logo,
+                 comp.cover_image as company_cover_image, comp.is_verified as company_is_verified,
+                 comp.agreement_text as company_agreement_text
+          FROM listings l
+          LEFT JOIN users u ON l.user_id = u.id
+          LEFT JOIN categories c ON l.category_id = c.id
+          LEFT JOIN companies comp ON l.company_id = comp.id
+          WHERE l.id = ?
+        `, [activeDraw.winner_listing_id]);
+        if (fullListingRow) {
+          listingFormatted = formatListing(fullListingRow);
+        }
+      }
+
+      res.json({
+        winner: activeDraw ? {
+          ...activeDraw,
+          listing: listingFormatted
+        } : null,
+        total_candidates: candidatesCountRow?.count || 0,
+        total_entries: entriesCountRow?.count || 0,
+      });
+    } catch (error: any) {
+      console.error('Error fetching current jackpot:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/jackpot/history', async (req: Request, res: Response) => {
+    try {
+      const history = await queryAll(`
+        SELECT jd.*, l.daily_rate, l.location, l.image_url as listing_image,
+               u.avatar as winner_avatar
+        FROM jackpot_draws jd
+        LEFT JOIN listings l ON jd.winner_listing_id = l.id
+        LEFT JOIN users u ON jd.winner_user_id = u.id
+        ORDER BY jd.id DESC
+      `);
+      res.json({ data: history });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/jackpot/candidates', async (req: Request, res: Response) => {
+    try {
+      const rows = await queryAll(`
+        SELECT l.*,
+               u.name as user_name, u.email as user_email, u.avatar as user_avatar,
+               c.name as category_name, c.icon as category_icon,
+               comp.name as company_name, comp.logo as company_logo
+        FROM listings l
+        JOIN users u ON l.user_id = u.id
+        LEFT JOIN categories c ON l.category_id = c.id
+        LEFT JOIN companies comp ON l.company_id = comp.id
+        ORDER BY l.rating DESC, l.id DESC
+      `);
+      const formatted = rows.map(r => formatListing(r));
+      res.json({ candidates: formatted });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/jackpot/enter', authenticateToken, async (req: any, res: Response) => {
+    try {
+      const { listing_id, week_label } = req.body;
+      if (!listing_id) {
+        return res.status(400).json({ error: 'listing_id is required' });
+      }
+      const label = week_label || 'Current Week Draw';
+      const { lastID } = await runSql(`
+        INSERT INTO jackpot_entries (user_id, listing_id, week_label)
+        VALUES (?, ?, ?)
+      `, [req.user.id, listing_id, label]);
+
+      res.status(201).json({ message: 'Listing successfully entered into Weekly Jackpot Draw!', entry_id: lastID });
+    } catch (error: any) {
+      res.status(400).json({ error: 'Already entered this listing or invalid entry.' });
+    }
+  });
+
+  app.post('/api/jackpot/draw', authenticateToken, async (req: any, res: Response) => {
+    try {
+      // Check admin
+      const currentUser = await queryOne('SELECT is_admin FROM users WHERE id = ?', [req.user.id]);
+      if (!currentUser || !currentUser.is_admin) {
+        return res.status(403).json({ error: 'Admin authorization required to run the weekly jackpot draw' });
+      }
+
+      const { winner_listing_id, week_label, prize_description } = req.body;
+      if (!winner_listing_id) {
+        return res.status(400).json({ error: 'winner_listing_id is required' });
+      }
+
+      const listing = await queryOne(`
+        SELECT l.*, u.name as user_name, u.id as user_id
+        FROM listings l
+        JOIN users u ON l.user_id = u.id
+        WHERE l.id = ?
+      `, [winner_listing_id]);
+
+      if (!listing) {
+        return res.status(404).json({ error: 'Selected listing not found' });
+      }
+
+      // Deactivate all previous active draws
+      await runSql('UPDATE jackpot_draws SET is_active = 0');
+
+      const label = week_label || `Week ${Math.ceil(new Date().getDate() / 7)} - ${new Date().toLocaleString('default', { month: 'long', year: 'numeric' })}`;
+      const prize = prize_description || '🌟 #1 Top App Banner Spotlight + 0% Commission for 30 Days';
+      const img = listing.image_url || 'https://images.unsplash.com/photo-1504148455328-c376907d081c?w=600';
+
+      const { lastID } = await runSql(`
+        INSERT INTO jackpot_draws (week_label, winner_user_id, winner_listing_id, winner_product_title, winner_user_name, winner_image_url, prize_description, is_active)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+      `, [label, listing.user_id, listing.id, listing.title, listing.user_name, img, prize]);
+
+      const created = await queryOne('SELECT * FROM jackpot_draws WHERE id = ?', [lastID]);
+      res.status(201).json({ message: 'New weekly jackpot winner crowned successfully!', winner: created });
+    } catch (error: any) {
+      console.error('Error drawing jackpot:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/jackpot/set-active/:id', authenticateToken, async (req: any, res: Response) => {
+    try {
+      const currentUser = await queryOne('SELECT is_admin FROM users WHERE id = ?', [req.user.id]);
+      if (!currentUser || !currentUser.is_admin) {
+        return res.status(403).json({ error: 'Admin authorization required' });
+      }
+      await runSql('UPDATE jackpot_draws SET is_active = 0');
+      await runSql('UPDATE jackpot_draws SET is_active = 1 WHERE id = ?', [req.params.id]);
+      res.json({ message: 'Active jackpot winner updated successfully' });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete('/api/jackpot/:id', authenticateToken, async (req: any, res: Response) => {
+    try {
+      const currentUser = await queryOne('SELECT is_admin FROM users WHERE id = ?', [req.user.id]);
+      if (!currentUser || !currentUser.is_admin) {
+        return res.status(403).json({ error: 'Admin authorization required' });
+      }
+      await runSql('DELETE FROM jackpot_draws WHERE id = ?', [req.params.id]);
+      res.json({ message: 'Jackpot record deleted' });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
   });
 
   // Serve static uploads

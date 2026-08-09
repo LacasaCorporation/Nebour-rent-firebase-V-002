@@ -112,7 +112,7 @@ watch(rentalDates, (val) => {
 
 // Owner CRUD
 const isOwner = computed(() => {
-  return authStore.isAuthenticated && authStore.currentUser?.id && listing.value?.user?.id === authStore.currentUser.id
+  return authStore.isAuthenticated && authStore.currentUser.value?.id && listing.value?.user?.id === authStore.currentUser.value?.id
 })
 
 // Edit modal
@@ -309,10 +309,10 @@ async function confirmDelete() {
             <!-- Status Indicator -->
             <span
               class="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full border shadow-2xs"
-              :class="listing.status === 'available' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : listing.status === 'rented' ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-rose-50 text-rose-700 border-rose-200'"
+              :class="listing.status === 'available' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : (listing.status === 'rented' || listing.status === 'currently rented' || listing.status === 'unavailable') ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-rose-50 text-rose-700 border-rose-200'"
             >
-              <span :class="['w-2 h-2 rounded-full', listing.status === 'available' ? 'bg-emerald-500 animate-pulse' : listing.status === 'rented' ? 'bg-amber-500' : 'bg-rose-500']"></span>
-              <span class="capitalize">{{ listing.status === 'available' ? 'Available to Rent' : listing.status === 'rented' ? 'Rented' : 'Maintenance' }}</span>
+              <span :class="['w-2 h-2 rounded-full', listing.status === 'available' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500']"></span>
+              <span>{{ listing.status === 'available' ? 'Available to Rent' : (listing.status === 'rented' || listing.status === 'currently rented' || listing.status === 'unavailable') ? 'Currently Rented' : 'Maintenance' }}</span>
             </span>
 
             <!-- Save to Wishlist Button -->
@@ -517,7 +517,7 @@ async function confirmDelete() {
 
         <!-- Action -->
         <button
-          v-if="authStore.isAuthenticated && listing.status === 'available' && authStore.currentUser?.id !== listing.user_id"
+          v-if="authStore.isAuthenticated && listing.status === 'available' && authStore.currentUser.value?.id !== listing.user_id"
           @click="showRentModal = true"
           class="w-full py-3.5 rounded-xl bg-gradient-to-r from-brand-500 to-brand-600 text-white font-semibold hover:shadow-xl hover:shadow-brand-500/25 hover:-translate-y-0.5 transition-all duration-200 flex items-center justify-center gap-2"
         >
@@ -574,7 +574,7 @@ async function confirmDelete() {
           <p class="text-xs text-warm-500 mt-0.5">Authentic community feedback from verified rental experiences</p>
         </div>
         <button
-          v-if="authStore.isAuthenticated && authStore.currentUser?.id !== listing.user_id"
+          v-if="authStore.isAuthenticated && authStore.currentUser.value?.id !== listing.user_id"
           @click="showReviewModal = true"
           class="px-4 py-2 bg-brand-50 hover:bg-brand-100 text-brand-700 text-sm font-semibold rounded-xl border border-brand-200 transition-colors flex items-center gap-1.5"
         >

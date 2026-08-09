@@ -314,6 +314,7 @@ export async function initDatabase() {
       { id: 2, name: 'Bob Smith', email: 'bob@example.com', password: passwordHash, phone: '555-0102', address: '456 Maple Ave, Queens, NY', is_admin: 0, avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150' },
       { id: 3, name: 'Carol Davis', email: 'carol@example.com', password: passwordHash, phone: '555-0103', address: '789 Pine Road, Manhattan, NY', is_admin: 0, avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150' },
       { id: 4, name: 'Demo User', email: 'demo@example.com', password: passwordHash, phone: '555-0199', address: '100 Neighborhood Way, Brooklyn, NY', is_admin: 0, avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150' },
+      { id: 5, name: 'System Admin', email: 'admin@mail.com', password: passwordHash, phone: '555-0000', address: '1 Admin Plaza, New York, NY', is_admin: 1, avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150' },
     ];
 
     for (const u of defaultUsers) {
@@ -332,6 +333,20 @@ export async function initDatabase() {
       'INSERT INTO users (name, email, password, phone, address, is_admin, avatar) VALUES (?, ?, ?, ?, ?, ?, ?)',
       ['Demo User', 'demo@example.com', passwordHash, '555-0199', '100 Neighborhood Way, Brooklyn, NY', 0, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150']
     );
+    saveDb();
+  }
+
+  // Ensure admin@mail.com exists as System Admin with is_admin = 1
+  const adminUser = await queryOne('SELECT * FROM users WHERE email = ?', ['admin@mail.com']);
+  if (!adminUser) {
+    const passwordHash = bcrypt.hashSync('password', 10);
+    db.run(
+      'INSERT INTO users (name, email, password, phone, address, is_admin, avatar) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ['System Admin', 'admin@mail.com', passwordHash, '555-0000', '1 Admin Plaza, New York, NY', 1, 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150']
+    );
+    saveDb();
+  } else if (adminUser.is_admin !== 1) {
+    db.run('UPDATE users SET is_admin = 1 WHERE email = ?', ['admin@mail.com']);
     saveDb();
   }
 
@@ -492,6 +507,72 @@ export async function initDatabase() {
     // Attach sample listings to seed companies
     db.run('UPDATE listings SET company_id = 1 WHERE id IN (1, 2, 9)');
     db.run('UPDATE listings SET company_id = 2 WHERE id IN (5, 6, 10)');
+  }
+
+  // Create Jackpot Tables
+  db.run(`
+    CREATE TABLE IF NOT EXISTS jackpot_draws (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      week_label TEXT NOT NULL,
+      winner_user_id INTEGER NOT NULL,
+      winner_listing_id INTEGER NOT NULL,
+      winner_product_title TEXT NOT NULL,
+      winner_user_name TEXT NOT NULL,
+      winner_image_url TEXT DEFAULT '',
+      prize_description TEXT DEFAULT 'Top App Banner Feature + 0% Service Fee for 30 Days',
+      draw_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (winner_user_id) REFERENCES users (id),
+      FOREIGN KEY (winner_listing_id) REFERENCES listings (id)
+    );
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS jackpot_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      listing_id INTEGER NOT NULL,
+      week_label TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users (id),
+      FOREIGN KEY (listing_id) REFERENCES listings (id)
+    );
+  `);
+
+  // Seed initial active jackpot draw if empty
+  const jackpotCount = await queryOne<{ count: number }>('SELECT COUNT(*) as count FROM jackpot_draws');
+  if (!jackpotCount || jackpotCount.count === 0) {
+    console.log('Seeding initial weekly jackpot draw winner...');
+    db.run(
+      `INSERT INTO jackpot_draws (week_label, winner_user_id, winner_listing_id, winner_product_title, winner_user_name, winner_image_url, prize_description, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        'Week 32 - August 2026',
+        1,
+        1,
+        'DeWalt Cordless Drill Kit',
+        'Alice Johnson',
+        'https://images.unsplash.com/photo-1504148455328-c376907d081c?w=600',
+        '🌟 #1 Top App Banner Feature + 0% Platform Commission + $50 Rental Bonus',
+        1
+      ]
+    );
+
+    // Seed entries
+    const seedEntries = [
+      { user_id: 1, listing_id: 1, week_label: 'Week 32 - August 2026' },
+      { user_id: 1, listing_id: 2, week_label: 'Week 32 - August 2026' },
+      { user_id: 2, listing_id: 3, week_label: 'Week 32 - August 2026' },
+      { user_id: 2, listing_id: 5, week_label: 'Week 32 - August 2026' },
+      { user_id: 3, listing_id: 6, week_label: 'Week 32 - August 2026' },
+      { user_id: 3, listing_id: 9, week_label: 'Week 32 - August 2026' },
+    ];
+    for (const e of seedEntries) {
+      try {
+        db.run('INSERT INTO jackpot_entries (user_id, listing_id, week_label) VALUES (?, ?, ?)', [e.user_id, e.listing_id, e.week_label]);
+      } catch {}
+    }
   }
 
   saveDb();

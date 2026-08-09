@@ -348,9 +348,9 @@ function renderMapMarkers() {
     let textClass = 'text-white'
     let statusLabel = 'Available'
 
-    if (status === 'rented' || status === 'unavailable') {
+    if (status === 'rented' || status === 'currently rented' || status === 'unavailable') {
       bgClass = 'bg-amber-500'
-      statusLabel = 'Rented'
+      statusLabel = 'Currently Rented'
     } else if (status === 'maintenance' || status === 'repair') {
       bgClass = 'bg-rose-500'
       statusLabel = 'Maintenance'
@@ -390,8 +390,8 @@ function selectListingCard(item: any) {
 
 function statusBadge(status?: string) {
   const s = (status || 'available').toLowerCase()
-  if (s === 'rented' || s === 'unavailable') {
-    return { text: 'Rented', class: 'bg-amber-100 text-amber-800 border-amber-200' }
+  if (s === 'rented' || s === 'currently rented' || s === 'unavailable') {
+    return { text: 'Currently Rented', class: 'bg-amber-100 text-amber-800 border-amber-200' }
   }
   if (s === 'maintenance' || s === 'repair') {
     return { text: 'Maintenance', class: 'bg-rose-100 text-rose-800 border-rose-200' }
